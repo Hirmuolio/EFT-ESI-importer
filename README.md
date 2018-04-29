@@ -13,6 +13,8 @@ To use the script you need to register as a developer at https://developers.eveo
 The script will ask for your authentication code when you log in. When you log in you are redirected to an adress that contains the authentication code.
 `http://localhost/oauth-callback?code=[this is your authentication code]`
 
+The script will import your effective skill levels. So if you are alpha with omega skills the script will only import your alpha skills.
+
 Requirements: 
 * Python 3.6 or newer
 * Requests http://docs.python-requests.org/en/master/

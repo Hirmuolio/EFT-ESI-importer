@@ -7,6 +7,12 @@ There are two versions of the script:
 *  	`EFT_ESI_importer.py` is the full version that you should use first.
 *  	`fast_EFT_ESI_importer.py` skips all the configuring steps and runs the importing without asking anything. You need to use the full version first to register and log in.
 
+To use the script you need to register as a developer at https://developers.eveonline.com/ (requires EVE char that has had paid subscription at some point). You need to register an application with following scopes. `esi-skills.read_skills.v1` and
+`esi-clones.read_implants.v1`. Set the callback url to `    http://localhost/oauth-callback ` The script will use the client ID and secret key of your registered application.
+
+The script will ask for your authentication code when you log in. When you log in you are redirected to an adress that contains the authentication code.
+`http://localhost/oauth-callback?code=[this is your authentication code]`
+
 Requirements: 
 * Python 3.6 or newer
 * Requests http://docs.python-requests.org/en/master/

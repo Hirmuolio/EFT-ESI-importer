@@ -80,16 +80,18 @@ def main_menu():
 		for n in range(0, len(config['characters'])):
 			print(n, config['characters'][n]['character_name'])
 			
-	print('\n[R] Run importing\n[D] Delete characters\n[L] Log in a character')
-	user_input = input("[R/D/L] ")
+	print('\n[S] Start importing\n[D] Delete characters\n[L] Log in a character\n[R] Reset')
+	user_input = input("[S/D/L/R] ")
 
-	if user_input == 'R' or user_input == 'r':
+	if user_input == 'S' or user_input == 's':
 		import_characters()
 	elif user_input == 'D' or user_input == 'd':
 		delete_characters()
 	elif user_input == 'L' or user_input == 'l':
 		print('Log in a new character.')
 		logging_in()
+	elif user_input == 'R' or user_input == 'r':
+		reset()
 	else:
 		print('[R]un inporting\n[E]dit characters\n[L]og in a character')
 	return
@@ -224,6 +226,28 @@ def import_characters():
 	
 	
 	return
+	
+def reset():
+	item_id = {}
+	with open('item_id.txt', 'w') as outfile:
+		json.dump(item_id, outfile, indent=4)
+		
+	config = {"client_id":'', "client_secret":'', "characters":[]}
+	with open('config.txt', 'w') as outfile:
+		json.dump(config, outfile, indent=4)
+	
+	#Resets configuration
+	print('\nno client ID or secret found. \nRegister at https://developers.eveonline.com/applications to get them')
+	client_id = input("Give your client ID: ")
+	client_secret = input("Give your client secret: ")
+	config = {"client_id":client_id, "client_secret":client_secret, "characters":[]}
+	with open('config.txt', 'w') as outfile:
+			json.dump(config, outfile, indent=4)
+	item_id = {}
+	with open('item_id.txt', 'w') as outfile:
+		json.dump(item_id, outfile, indent=4)
+	
+	
 #---------------------------
 #Start the actual script now
 #---------------------------
@@ -239,7 +263,7 @@ try:
 		client_id = config['client_id']
 		client_secret = config['client_secret']
 	except KeyError:
-		print('no client ID or secret found. The client ID and client secret can be found at https://developers.eveonline.com/applications')
+		print('no client ID or secret found. \nRegister at https://developers.eveonline.com/applications to get them')
 		client_id = input("Give your client ID: ")
 		client_secret = input("Give your client secret: ")
 		config = {"client_id":client_id, "client_secret":client_secret, "characters":[]}
@@ -247,7 +271,7 @@ try:
 			json.dump(config, outfile, indent=4)
 		
 except (IOError, json.decoder.JSONDecodeError):
-	print('no file found or file empty')
+	print('no client ID or secret found. \nRegister at https://developers.eveonline.com/applications to get them')
 	client_id = input("Give your client ID: ")
 	client_secret = input("Give your client secret: ")
 	config = {"client_id":client_id, "client_secret":client_secret, "characters":[]}
@@ -258,3 +282,4 @@ run = True
 while run:
 	main_menu()
 
+print('Imprt completed')

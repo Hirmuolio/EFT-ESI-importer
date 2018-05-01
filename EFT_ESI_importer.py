@@ -9,6 +9,24 @@ import base64
 #Define functions
 #---------------------------
 
+def check_error(esi_response, job):
+	status_code = esi_response.status_code
+	
+	if status_code != 200:
+		#Error
+		print('Failed to '+job+'. Error',esi_response.status_code,'-', esi_response.json()['error'])
+		error = True
+	else:
+		error = False
+		try:
+			#Try to print warning
+			print('Warning',esi_response.headers['warning'])
+		except KeyError:
+			warning = False
+	
+	return error
+	
+	
 #Code for logging in
 def logging_in():
 	login_url = 'https://login.eveonline.com/oauth/authorize?response_type=code&redirect_uri=http://localhost/oauth-callback&client_id='+client_id+'&scope=esi-skills.read_skills.v1+esi-clones.read_implants.v1'
@@ -22,13 +40,18 @@ def logging_in():
 	
 	esi_response = requests.post(authentication_url, headers =  {"Authorization":"Basic "+combo}, data = {"grant_type": "authorization_code", "code": authentication_code} )
 	
-	if esi_response.status_code == 200:
+	if not check_error(esi_response, 'exchange authorization code for tokens'):
 		response = esi_response.json()
 		
 		access_token = response['access_token']
 		refresh_token = response['refresh_token']
 		
 		character_info = get_char_info(access_token)
+		
+		#Check if character info errored
+		if character_info == 'error':
+			return
+			
 		character_info["refresh_token"] = refresh_token
 
 		config['characters'].append(character_info)
@@ -39,7 +62,7 @@ def logging_in():
 		with open('config.txt', 'w') as outfile:
 			json.dump(config, outfile, indent=4)
 	else:
-		print('Logging in. Error',esi_response.status_code,'-', esi_response.json()['error'])
+		return
 	
 	return config
 	
@@ -50,10 +73,11 @@ def refresh_auth(refresh_token):
 	combo = base64.b64encode(bytes( client_id+':'+client_secret, 'utf-8')).decode("utf-8")
 	esi_response = requests.post(refresh_url, headers =  {"Authorization":"Basic "+combo}, data = {"grant_type": "refresh_token", "refresh_token": refresh_token} )
 	
-	if esi_response.status_code == 200:
+	if not check_error(esi_response, 'refresh access token'):
 		access_token = esi_response.json()['access_token']
 	else:
-		print('Refreshing acces token. Error',esi_response.status_code,'-', esi_response.json()['error'])
+		return 'error'
+
 	return access_token
 	
 #Get info on the character by using the access token
@@ -62,13 +86,14 @@ def get_char_info(access_token):
 	url = 'https://login.eveonline.com/oauth/verify'
 	esi_response = requests.get(url, headers =  {"Authorization":"Bearer "+access_token})
 	
-	if esi_response.status_code == 200:
+	if not check_error(esi_response, 'get character info with access token'):
 		response = esi_response.json()
 		character_id = response['CharacterID']
 		character_name = response['CharacterName']
 		character_info = {"character_id":character_id, "character_name":character_name}
 	else:
-		print('Getting char info. Error',esi_response.status_code,'-', esi_response.json()['error'])
+		return 'error'
+
 	return character_info
 
 def main_menu():
@@ -148,6 +173,10 @@ def import_characters():
 			
 			access_token = refresh_auth(refresh_token)
 			
+			#Check if the access token didn't error
+			if access_token == 'error':
+				return
+			
 			#Import skills and put them in the string
 			#import implants and put them to same string
 			#Write the string to file and be done
@@ -158,9 +187,7 @@ def import_characters():
 			url = 'https://esi.tech.ccp.is/v4/characters/'+str(character_id)+'/skills/?datasource=tranquility'
 			
 			esi_response = requests.get(url, headers =  {"Authorization":"Bearer "+access_token})
-			if esi_response.status_code != 200:
-				print(esi_response.status_code,'-', esi_response.json()['error'], '- skills for character: '+character_name)
-			else:
+			if not check_error(esi_response, 'get character skills'):
 				skills = esi_response.json()['skills']
 				
 				for n in range(0, len(skills)):
@@ -183,13 +210,13 @@ def import_characters():
 							print(esi_response.status_code,'-', esi_response.json()['error'], '- skill ID: '+skill_id)
 							
 					output = output + skill_name + '=' + str(skill_level) + '\n'
-			
-			url = 'https://esi.tech.ccp.is/v1/characters/'+str(character_id)+'/implants/?datasource=tranquility'
-			
-			esi_response = requests.get(url, headers =  {"Authorization":"Bearer "+access_token})
-			if esi_response.status_code != 200:
-				print(esi_response.status_code,'-', esi_response.json()['error'], '- implants for character: '+character_name)
 			else:
+				return
+				
+			url = 'https://esi.tech.ccp.is/v1/characters/'+str(character_id)+'/implants/?datasource=tranquility'
+			esi_response = requests.get(url, headers =  {"Authorization":"Bearer "+access_token})
+			
+			if not check_error(esi_response, 'get character implants'):
 				implants = esi_response.json()
 				
 				for n in range(0, len(implants)):
@@ -209,7 +236,9 @@ def import_characters():
 							print(esi_response.status_code,'-', esi_response.json()['error'], '- implant ID: '+implant_id)
 				
 					output = output + 'Implant=' + implant_name + '\n'
-					
+			else:
+				return
+				
 			#save item id names
 			with open("item_id.txt", "w") as outfile:
 				json.dump(item_id, outfile, indent=4)

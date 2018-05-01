@@ -16,6 +16,8 @@ def check_error(esi_response, job):
 		#Error
 		print('Failed to '+job+'. Error',esi_response.status_code,'-', esi_response.json()['error'])
 		error = True
+		global has_errors
+		has_errors = True
 	else:
 		error = False
 		try:
@@ -312,3 +314,5 @@ while run:
 	main_menu()
 
 print('Imprt completed')
+if has_errors == True:
+	input("There were errors. Press enter to exit...")

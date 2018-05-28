@@ -155,12 +155,11 @@ def import_characters():
 				try:
 					implant_name = item_id[str(implant_id)]
 				except KeyError:
-					print('                                             \r', end="")#clears the line to stop things from previous loop from staying
-					print('\rFetching implant name for ID:', implant_id, end="")
+					print('Fetching implant name for ID:', implant_id, end="")
 					esi_response = esi_calling.call_esi(scope = '/v3/universe/types/{par}', url_parameter=implant_id, tokens = tokens, calltype='get', job = 'get implant name')
 		
 					implant_name = esi_response.json()['name']
-					print(' ', implant_name, end="")
+					print(' ', implant_name)
 					item_id[implant_id] = implant_name
 			
 				output = output + 'Implant=' + implant_name + '\n'

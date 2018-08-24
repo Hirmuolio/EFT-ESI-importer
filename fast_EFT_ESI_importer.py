@@ -4,6 +4,8 @@ import json
 
 import esi_calling
 
+esi_calling.set_user_agent('EFT ESI importer')
+
 #---------------------------
 #Define functions
 #---------------------------

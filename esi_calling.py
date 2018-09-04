@@ -13,13 +13,37 @@ from datetime import timedelta
 
 user_agent = 'something from Hirmuolio'
 
+session = requests.Session()
+
 def set_user_agent(new_user_agent):
 	global user_agent
 	user_agent = new_user_agent
 	
 
 def error_handling(esi_response, number_of_attempts, tokens = None, scope = None, job = None):
-	#Call this function to decide what to do on error
+	#Call this function to check if there are rerrors
+	#Returns true if you need to retry
+	#Returns false if everything OK
+	
+	
+	#200 = ok
+	#204 = ok
+	#304 = no change
+	#404 = not found
+	#400 = bad request. User is stupid
+	
+	#401 
+	#403 = no authorization
+	#420 = error limited
+	
+	#500 = internal error
+	#503 = unavailable
+	#504 = timeout
+	
+	if esi_response.status_code in [200, 204, 304, 404, 400]:
+		#All ok or at least acceptable
+		return False
+	
 	#Some arbitrary maximum try ammount
 	if number_of_attempts == 50:
 		print('There has been 50 failed attemts to call ESI. Something may be wrong.')
@@ -41,7 +65,7 @@ def error_handling(esi_response, number_of_attempts, tokens = None, scope = None
 	if esi_response.status_code == 420:
 		#error limit reached. Wait until reset and try again.
 		time.sleep(esi_response.headers['x-esi-error-limit-reset']+1)
-	elif esi_response.status_code in [400, 401, 403]:
+	elif esi_response.status_code in [401, 403]:
 		#Authorization not working
 		#Check if access token expired (can be fixed)
 		#Check if scopes are valid (can't be fixed)
@@ -61,7 +85,6 @@ def error_handling(esi_response, number_of_attempts, tokens = None, scope = None
 
 
 def logging_in(scopes, client_id, client_secret):
-	number_of_attempts = 1
 	login_url = 'https://login.eveonline.com/oauth/authorize?response_type=code&redirect_uri=http://localhost/oauth-callback&client_id='+client_id+'&scope='+scopes
 
 	webbrowser.open(login_url, new=0, autoraise=True)
@@ -71,15 +94,21 @@ def logging_in(scopes, client_id, client_secret):
 	combo = base64.b64encode(bytes( client_id+':'+client_secret, 'utf-8')).decode("utf-8")
 	authentication_url = "https://login.eveonline.com/oauth/token"
 	
-	esi_response = requests.post(authentication_url, headers =  {"Authorization":"Basic "+combo, "User-Agent":user_agent}, data = {"grant_type": "authorization_code", "code": authentication_code} )
 	
-	if esi_response.status_code != 200:
-		error_handling(esi_response, number_of_attempts, job = 'log in')
-	else:
-		tokens = {}
-		tokens['refresh_token'] = esi_response.json()['refresh_token']
-		tokens['access_token'] = esi_response.json()['access_token']
-		tokens['expiry_time'] = str( datetime.utcnow() + timedelta(0,esi_response.json()['expires_in']) )
+	number_of_attempts = 1
+	trying = True
+	while trying:
+	
+		esi_response = requests.post(authentication_url, headers =  {"Authorization":"Basic "+combo, "User-Agent":user_agent}, data = {"grant_type": "authorization_code", "code": authentication_code} )
+
+		trying = error_handling(esi_response, number_of_attempts, job = 'log in')
+		
+		number_of_attempts = number_of_attempts + 1
+		
+	tokens = {}
+	tokens['refresh_token'] = esi_response.json()['refresh_token']
+	tokens['access_token'] = esi_response.json()['access_token']
+	tokens['expiry_time'] = str( datetime.utcnow() + timedelta(0,esi_response.json()['expires_in']) )
 
 	
 	return tokens
@@ -118,11 +147,8 @@ def check_tokens(tokens, client_secret, client_id):
 		while trying == True:
 			esi_response = requests.post(refresh_url, headers =  {"Authorization":"Basic "+combo, "User-Agent":user_agent}, data = {"grant_type": "refresh_token", "refresh_token": tokens['refresh_token']} )
 			
-			if esi_response.status_code != 200:
-				error_handling(esi_response, number_of_attempts, tokens, scope = None, job = 'refresh tokens')
-			else:
-				#Success
-				trying = False
+			trying = error_handling(esi_response, number_of_attempts, tokens, scope = None, job = 'refresh tokens')
+
 			number_of_attempts = number_of_attempts + 1
 			
 		tokens['refresh_token']	= esi_response.json()['refresh_token']
@@ -143,14 +169,12 @@ def get_token_info(tokens):
 	url = 'https://login.eveonline.com/oauth/verify'
 	
 	trying = True
+	number_of_attempts = 1
 	while trying == True:
 		esi_response = requests.get(url, headers =  {"Authorization":"Bearer "+tokens['access_token'], "User-Agent":user_agent})
 		
-		if esi_response.status_code != 200:
-			error_handling(esi_response, number_of_attempts, tokens, scope = None, job = 'get token info')
-		else:
-			#Success
-			trying = False
+		trying = error_handling(esi_response, number_of_attempts, tokens, scope = None, job = 'get token info')
+		number_of_attempts = number_of_attempts + 1
 			
 	token_info = {}
 	token_info['character_name'] = esi_response.json()['CharacterName']
@@ -161,10 +185,10 @@ def get_token_info(tokens):
 	
 	return token_info
 		
-def call_esi(scope, url_parameter = '', parameters={}, etag = None, tokens = None, datasource = 'tranquility', calltype='get', job = ''):
+def call_esi(scope, url_parameter = '', etag = None, tokens = None, datasource = 'tranquility', calltype='get', job = ''):
 	#scope = url part. Mark the spot of parameter with {par}
 	#url_parameter = parameter that goes into the url
-	#parameters = json parameters to include (pages mostly)
+	#parameters = json parameters to include (pages mostly) - NOT USED ANYMORE
 	#etag = TODO
 	#tokens = json that contains refresh token. Optinally also access token and its expiration time if they already exist.
 	#refresh_token = tokens['refresh_token']
@@ -175,8 +199,10 @@ def call_esi(scope, url_parameter = '', parameters={}, etag = None, tokens = Non
 	#calltype = get, post or delete. Default get
 	#job = string telling what is being done. Is displayed on error message.
 	
-	number_of_attempts = 0
-		
+	#Returns array that contains all the responses
+	#Even single page response is put into an array since errors will result in valid responses that are not multipaged even though you would expect them to be
+	
+	number_of_attempts = 1
 	
 	#Build the url to call to
 	#Also replace // with / to make things easier
@@ -184,6 +210,7 @@ def call_esi(scope, url_parameter = '', parameters={}, etag = None, tokens = Non
 
 	
 	#print(url)
+	all_responses = []
 	
 	#un-authorized / authorized
 	if tokens == None:
@@ -195,29 +222,46 @@ def call_esi(scope, url_parameter = '', parameters={}, etag = None, tokens = Non
 	while trying == True:
 		#Make the call based on calltype
 		if calltype == 'get':
-			esi_response = requests.get(url, headers = headers, params = parameters)
+			esi_response = session.get(url, headers = headers)
 		elif calltype == 'post':
-			esi_response = requests.post(url, headers = headers, params = parameters)
+			esi_response = session.post(url, headers = headers)
 		elif calltype == 'delete':
-			esi_response = requests.post(url, headers = headers, params = parameters)
+			esi_response = session.delete(url, headers = headers)
 		
-		#200 = ok
-		#204 = ok
-		#304 = no change
-		#404 = not found
-		#400 = bad request. User is stupid
-		if esi_response.status_code in [200, 204, 304]:
-			#All OK
-			trying = False
-		elif esi_response.status_code in [404,  400]:
-			#print('404 not found')
-			trying = False
-		else:
-			error_handling(esi_response, number_of_attempts, tokens, scope, job)
-
+		trying = error_handling(esi_response, number_of_attempts, tokens, scope, job)
 		number_of_attempts = number_of_attempts + 1
+	
+	all_responses.append(esi_response)
+	
+	#Multipaged  calls
+	#Returns array of all the r esponses
+	if 'X-Pages' in esi_response.headers:
+		number_of_attempts = 1
 		
-	return esi_response
+		total_pages = int(esi_response.headers['X-Pages'])
+		expires = esi_response.headers['expires']
+		if total_pages > 1:
+			print('multipage response. Fetching ', total_pages, 'pages.')
+		
+		for page in range(2, total_pages + 1):
+			trying = True
+			while trying == True:
+				print('\rimporting page ', page, '/', total_pages, end='')
+				parameters = {'page': page}
+				esi_response_page = session.get(url, headers = headers, params = parameters)
+				
+				if esi_response_page.json() == []:
+					print('Seems like ESI updated during importing. Results may be wrong.')
+				
+				all_responses.append(esi_response_page)
+				
+				trying = error_handling(esi_response, number_of_attempts, tokens, scope, job)
+				number_of_attempts = number_of_attempts + 1
+		if total_pages > 1:	
+			print(' - DONE')
+
+		
+	return all_responses
 	
 	
 	
